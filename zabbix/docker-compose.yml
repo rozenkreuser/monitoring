@@ -1,0 +1,103 @@
+version: '3.8'
+
+services:
+  
+  # PostgreSQL Database for Zabbix
+  postgres:
+    #image: postgres:14
+    image: timescale/timescaledb:latest-pg15
+    environment:
+      POSTGRES_DB: zabbix
+      POSTGRES_USER_FILE: /run/secrets/postgres_user        # Zabbix user for the DB
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password  # Zabbix user password
+      POSTGRES_INITDB_ARGS: "--data-checksums"              # Optional for data integrity
+      POSTGRES_HOST_AUTH_METHOD: "md5"                      # Ensure password authentication is used
+    secrets:
+      - postgres_user
+      - postgres_password
+      - postgres_superuser_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - zabbix_net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    command: postgres -c 'max_connections=256'
+
+  # Zabbix Server
+  zabbix-server:
+    image: zabbix/zabbix-server-pgsql:alpine-6.4-latest
+    secrets:
+      - postgres_user
+      - postgres_password
+    ports:
+      - "10051:10051"
+    environment:
+      DB_SERVER_HOST: postgres
+      POSTGRES_USER_FILE: /run/secrets/postgres_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      ZBX_DEBUGLEVEL: 3
+      ZBX_TIMEOUT: 30
+      
+      
+    depends_on:
+      - postgres
+    networks:
+      - zabbix_net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  # Zabbix Web Interface
+  zabbix-web:
+    image: zabbix/zabbix-web-nginx-pgsql:alpine-6.4-latest
+    secrets:
+      - postgres_user
+      - postgres_password
+    environment:
+      DB_SERVER_HOST: postgres
+      POSTGRES_USER_FILE: /run/secrets/postgres_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      PHP_TZ: "Europe/Moscow"  # Set your time zone
+      ZBX_SERVER_NAME: zabbix.local
+      ZBX_SERVER_HOST: zabbix-server
+    depends_on:
+      - zabbix-server
+    networks:
+      - zabbix_net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    ports:
+      - "8080:8080"
+   ####zabbix_agent
+#  zabbix-agent:
+#    image: zabbix/zabbix-agent:alpine-6.4-latest
+#    deploy:
+#      replicas: 1
+#    environment:
+#      ZBX_SERVER_HOST: zabbix-server,127.0.0.1,10.0.2.4
+#      ZBX_HOSTNAME: "Zabbix server"  # Unique hostname for this agent
+#    networks:
+#      - zabbix_net
+#    volumes:
+#      - /var/run/docker.sock:/var/run/docker.sock   
+
+volumes:
+  pgdata:
+
+networks:
+  zabbix_net:
+    driver: overlay
+
+secrets:
+  postgres_user:
+    external: true
+  postgres_password:
+    external: true
+  postgres_superuser_password:
+    external: true

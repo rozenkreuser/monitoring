@@ -1,0 +1,47 @@
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    ports: 
+      - "9090:9090"
+    restart: unless-stopped
+    volumes:
+      - /opt/prometheus-grafana/prometheus:/etc/prometheus
+      - prometheus-grafana_prom_data:/prometheus
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=grafana
+    volumes:
+      - /opt/prometheus-grafana/grafana:/etc/grafana/provisioning/datasources
+      - prometheus-grafana_grafana-storage:/var/lib/grafana
+  mktxp:
+    image: ghcr.io/akpw/mktxp:latest
+    container_name: mktxp
+    restart: always
+    volumes:
+      - /opt/prometheus-grafana/mktxp:/home/mktxp/mktxp/
+  
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+
+    volumes:
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /:/rootfs:ro
+      - /dev/disk/:/dev/disk:ro
+      
+
+volumes:
+  prometheus-grafana_prom_data:
+    external: true
+  prometheus-grafana_grafana-storage:
+    external: true
